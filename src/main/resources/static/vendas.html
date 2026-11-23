@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Cadastro de Vendas</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+<nav class="navbar navbar-expand navbar-dark bg-dark mb-4">
+  <div class="container">
+    <a class="navbar-brand" href="produtos.html">Projeto 2</a>
+    <div class="navbar-nav">
+      <a class="nav-link" href="produtos.html">Produtos</a>
+      <a class="nav-link" href="clientes.html">Clientes</a>
+      <a class="nav-link active" href="vendas.html">Vendas</a>
+    </div>
+  </div>
+</nav>
+
+<div class="container">
+  <h2 class="mb-3">Cadastro de Vendas</h2>
+
+  <form id="formVenda" class="row g-3 mb-3">
+    <input type="hidden" id="vendaId">
+
+    <div class="col-md-6">
+      <label class="form-label">Data da venda</label>
+      <input type="date" id="data" class="form-control" required>
+    </div>
+
+    <div class="col-md-6">
+      <label class="form-label">Loja</label>
+      <input type="text" id="loja" class="form-control" placeholder="Ex.: Loja Centro" required>
+    </div>
+
+    <div class="col-md-6">
+      <label class="form-label">Cliente</label>
+      <select id="idCliente" class="form-select" required>
+        <option value="">Selecione um cliente</option>
+      </select>
+    </div>
+
+    <div class="col-md-6">
+      <label class="form-label">Produto</label>
+      <select id="idProduto" class="form-select" required>
+        <option value="">Selecione um produto</option>
+      </select>
+    </div>
+
+    <div class="col-md-6">
+      <label class="form-label">Quantidade</label>
+      <input type="number" id="quantidade" class="form-control" min="1" value="1" required>
+    </div>
+
+    <div class="col-md-6">
+      <label class="form-label">Valor da venda (R$)</label>
+      <input type="text" id="valorVenda" class="form-control bg-body-secondary" value="0,00" readonly>
+      <div class="form-text">Calculado automaticamente: preço do produto &times; quantidade.</div>
+    </div>
+
+    <div class="col-12">
+      <button type="submit" class="btn btn-primary" id="btnSalvar">Cadastrar</button>
+      <button type="button" class="btn btn-secondary d-none" id="btnCancelar">Cancelar</button>
+    </div>
+  </form>
+
+  <div id="mensagem" class="text-success fw-semibold mb-3"></div>
+
+  <h4>Vendas cadastradas</h4>
+  <table class="table table-striped bg-white shadow-sm">
+    <thead class="table-light">
+      <tr>
+        <th>ID</th>
+        <th>Data</th>
+        <th>Loja</th>
+        <th>Cliente</th>
+        <th>Produto</th>
+        <th>Quantidade</th>
+        <th>Valor da venda</th>
+        <th>Ações</th>
+      </tr>
+    </thead>
+    <tbody id="tabelaVendas"></tbody>
+  </table>
+</div>
+
+<script>
+  const API_BASE = "/api";
+  const form = document.getElementById("formVenda");
+  const selectCliente = document.getElementById("idCliente");
+  const selectProduto = document.getElementById("idProduto");
+  const inputQtd = document.getElementById("quantidade");
+  const inputTotal = document.getElementById("valorVenda");
+  const msg = document.getElementById("mensagem");
+  const tbody = document.getElementById("tabelaVendas");
+
+  let produtosCache = [];
+  let vendas = [];
+
+  function esc(s) {
+    return String(s ?? "").replace(/[&<>"']/g, c =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  }
+
+  function mostrarMensagem(texto, erro = false) {
+    msg.textContent = texto;
+    msg.className = (erro ? "text-danger" : "text-success") + " fw-semibold mb-3";
+  }
+
+  function formatBRL(num) {
+    return Number(num).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  }
+
+  function formatDataBR(isoDate) {
+    if (!isoDate) return "";
+    const [ano, mes, dia] = isoDate.split("-");
+    return `${dia}/${mes}/${ano}`;
+  }
+
+  function calcularTotal() {
+    const prodId = Number(selectProduto.value);
+    const qtd = Number(inputQtd.value) || 0;
+    const prod = produtosCache.find(p => p.id === prodId);
+    const total = prod ? Number(prod.valor) * qtd : 0;
+    inputTotal.value = total.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  selectProduto.addEventListener("change", calcularTotal);
+  inputQtd.addEventListener("input", calcularTotal);
+
+  // Carrega as listas suspensas a partir do banco (só clientes/produtos já cadastrados)
+  async function carregarOpcoes() {
+    const [resClientes, resProdutos] = await Promise.all([
+      fetch(`${API_BASE}/clientes`),
+      fetch(`${API_BASE}/produtos`)
+    ]);
+    const clientes = await resClientes.json();
+    produtosCache = await resProdutos.json();
+
+    const clienteAtual = selectCliente.value;
+    selectCliente.innerHTML = `<option value="">Selecione um cliente</option>`;
+    clientes.forEach(c => {
+      const opt = document.createElement("option");
+      opt.value = c.id;
+      opt.textContent = c.nome;
+      selectCliente.appendChild(opt);
+    });
+    if (clienteAtual) selectCliente.value = clienteAtual;
+
+    const produtoAtual = selectProduto.value;
+    selectProduto.innerHTML = `<option value="">Selecione um produto</option>`;
+    produtosCache.forEach(p => {
+      const opt = document.createElement("option");
+      opt.value = p.id;
+      opt.textContent = `${p.nome} — ${formatBRL(p.valor)}`;
+      selectProduto.appendChild(opt);
+    });
+    if (produtoAtual) selectProduto.value = produtoAtual;
+
+    calcularTotal();
+  }
+
+  async function carregarVendas() {
+    const res = await fetch(`${API_BASE}/vendas`);
+    vendas = await res.json();
+    tbody.innerHTML = "";
+
+    vendas.forEach(v => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${v.id}</td>
+        <td>${formatDataBR(v.data)}</td>
+        <td>${esc(v.loja)}</td>
+        <td>${esc(v.cliente?.nome)}</td>
+        <td>${esc(v.produto?.nome)}</td>
+        <td>${v.quantidade}</td>
+        <td>${formatBRL(v.valorVenda)}</td>
+        <td>
+          <button class="btn btn-primary btn-sm" data-acao="editar" data-id="${v.id}">Editar</button>
+          <button class="btn btn-danger btn-sm" data-acao="excluir" data-id="${v.id}">Excluir</button>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  tbody.addEventListener("click", (e) => {
+    const btn = e.target.closest("button[data-acao]");
+    if (!btn) return;
+    const id = Number(btn.dataset.id);
+    if (btn.dataset.acao === "editar") editar(id);
+    if (btn.dataset.acao === "excluir") excluir(id);
+  });
+
+  async function editar(id) {
+    const v = vendas.find(x => x.id === id);
+    if (!v) return;
+    await carregarOpcoes();
+    document.getElementById("vendaId").value = v.id;
+    document.getElementById("data").value = v.data;
+    document.getElementById("loja").value = v.loja;
+    selectCliente.value = v.cliente?.id || "";
+    selectProduto.value = v.produto?.id || "";
+    inputQtd.value = v.quantidade;
+    calcularTotal();
+    document.getElementById("btnSalvar").textContent = "Atualizar";
+    document.getElementById("btnCancelar").classList.remove("d-none");
+  }
+
+  function limparFormulario() {
+    form.reset();
+    document.getElementById("vendaId").value = "";
+    inputQtd.value = 1;
+    calcularTotal();
+    document.getElementById("btnSalvar").textContent = "Cadastrar";
+    document.getElementById("btnCancelar").classList.add("d-none");
+  }
+
+  document.getElementById("btnCancelar").addEventListener("click", limparFormulario);
+
+  async function excluir(id) {
+    const res = await fetch(`${API_BASE}/vendas/${id}`, { method: "DELETE" });
+    if (res.ok) {
+      mostrarMensagem("Venda excluída com sucesso!");
+    } else {
+      mostrarMensagem("Erro ao excluir a venda.", true);
+    }
+    carregarVendas();
+  }
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const id = document.getElementById("vendaId").value;
+    const payload = {
+      data: document.getElementById("data").value,
+      loja: document.getElementById("loja").value.trim(),
+      idCliente: Number(selectCliente.value),
+      idProduto: Number(selectProduto.value),
+      quantidade: Number(inputQtd.value)
+    };
+
+    const url = id ? `${API_BASE}/vendas/${id}` : `${API_BASE}/vendas`;
+    const method = id ? "PUT" : "POST";
+
+    const res = await fetch(url, {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+
+    if (!res.ok) {
+      mostrarMensagem("Erro ao salvar a venda. Verifique os campos e tente novamente.", true);
+      return;
+    }
+
+    mostrarMensagem(id ? "Venda atualizada com sucesso!" : "Venda cadastrada com sucesso!");
+    limparFormulario();
+    carregarVendas();
+  });
+
+  (async function init() {
+    await carregarOpcoes();
+    await carregarVendas();
+  })();
+</script>
+</body>
+</html>
